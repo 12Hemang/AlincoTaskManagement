@@ -1,7 +1,8 @@
 import React from 'react';
 import { Provider } from 'react-redux';
-import { store } from '../Alinco/src/app/store';
-import AppNavigator from '../Alinco/src/app/navigation/AppNavigator';
+import { store } from './app/store';
+import AppNavigator from './app/navigation/AppNavigator';
+
 
 export default function App() {
   return (
