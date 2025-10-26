@@ -1,5 +1,6 @@
-import { createSlice, createAsyncThunk, PayloadAction, ActionReducerMapBuilder, AsyncThunk } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import axiosInstance from '../../../utils/axiosInstance';
+import { addAsyncCases } from '../../../utils/asyncReducers.ts';
 
 // -------------------------
 // Project Type
@@ -48,7 +49,7 @@ export const fetchProjects = createAsyncThunk('project/fetchProjects', async (_,
       params: {
         fields: JSON.stringify([
           'name',
-          'project_name', 
+          'project_name',
           'status',
           'priority',
           'project_type',
@@ -125,29 +126,6 @@ export const deleteProject = createAsyncThunk(
 );
 
 // -------------------------
-// Helper for async reducers
-// -------------------------
-function handleAsyncThunk<T, R>(
-  builder: ActionReducerMapBuilder<T>,
-  thunk: AsyncThunk<R, any, any>,
-  onFulfilled?: (state: T, action: PayloadAction<R>) => void
-) {
-  builder
-    .addCase(thunk.pending, (state: any) => {
-      state.loading = true;
-      state.error = undefined;
-    })
-    .addCase(thunk.fulfilled, (state: any, action: PayloadAction<R>) => {
-      state.loading = false;
-      if (onFulfilled) onFulfilled(state, action);
-    })
-    .addCase(thunk.rejected, (state: any, action: any) => {
-      state.loading = false;
-      state.error = action.payload || action.error?.message || 'Something went wrong';
-    });
-}
-
-// -------------------------
 // Slice
 // -------------------------
 const projectSlice = createSlice({
@@ -174,19 +152,20 @@ const projectSlice = createSlice({
     },
   },
   extraReducers: builder => {
-    handleAsyncThunk(builder, fetchProjects, (state, action) => {
+    // Replace handleAsyncThunk with addAsyncCases for all async thunks
+    addAsyncCases(builder, fetchProjects, (state, action) => {
       state.projects = action.payload;
     });
 
-    handleAsyncThunk(builder, fetchProjectById, (state, action) => {
+    addAsyncCases(builder, fetchProjectById, (state, action) => {
       state.selectedProject = action.payload;
     });
 
-    handleAsyncThunk(builder, createProject, (state, action) => {
+    addAsyncCases(builder, createProject, (state, action) => {
       state.projects.unshift(action.payload);
     });
 
-    handleAsyncThunk(builder, updateProject, (state, action) => {
+    addAsyncCases(builder, updateProject, (state, action) => {
       const index = state.projects.findIndex(project => project.name === action.payload.name);
       if (index !== -1) {
         state.projects[index] = action.payload;
@@ -196,7 +175,7 @@ const projectSlice = createSlice({
       }
     });
 
-    handleAsyncThunk(builder, deleteProject, (state, action) => {
+    addAsyncCases(builder, deleteProject, (state, action) => {
       state.projects = state.projects.filter(project => project.name !== action.payload);
       if (state.selectedProject?.name === action.payload) {
         state.selectedProject = undefined;
@@ -205,12 +184,12 @@ const projectSlice = createSlice({
   },
 });
 
-export const { 
-  clearSelectedProject, 
-  clearError, 
-  addTempProject, 
-  updateProjectInList, 
-  removeProjectFromList 
+export const {
+  clearSelectedProject,
+  clearError,
+  addTempProject,
+  updateProjectInList,
+  removeProjectFromList
 } = projectSlice.actions;
 
 export default projectSlice.reducer;

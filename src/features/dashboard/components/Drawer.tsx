@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootStackParamList, NavigationRoutes } from '../../../app/navigation/AppNavigator';
+import {  NavigationRoutes } from '../../../app/navigation/AppNavigator';
 import { RootState } from '../../../app/store';
 import { logoutUser } from '../../auth/slice/authSlice';
 
@@ -25,7 +25,7 @@ interface DrawerProps {
 }
 
 const Drawer: React.FC<DrawerProps> = ({ drawerOpen, drawerAnim, onClose }) => {
-  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+  const navigation = useNavigation<NavigationProp<any>>();
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
 
@@ -34,35 +34,40 @@ const Drawer: React.FC<DrawerProps> = ({ drawerOpen, drawerAnim, onClose }) => {
       id: '1', 
       title: 'Dashboard', 
       icon: '📊',
-      route: NavigationRoutes.Dashboard as keyof RootStackParamList
+      route: NavigationRoutes.Dashboard 
     },
     { 
       id: '2', 
       title: 'Projects', 
       icon: '📁',
-      route: NavigationRoutes.ProjectListScreen as keyof RootStackParamList
-    },
+      route: NavigationRoutes.ProjectListScreen },
     { 
       id: '3', 
       title: 'Tasks', 
       icon: '✅',
-      route: NavigationRoutes.TaskListScreen as keyof RootStackParamList
+      route: NavigationRoutes.TaskListScreen
     },
     { 
       id: '4', 
       title: 'Create Task', 
       icon: '➕',
-      route: NavigationRoutes.TaskCreate as keyof RootStackParamList
+      route: NavigationRoutes.TaskCreate
     },
     { 
       id: '5', 
       title: 'Reports', 
       icon: '📈',
-      route: NavigationRoutes.Dashboard as keyof RootStackParamList // Replace with actual reports route
+      route: NavigationRoutes.Dashboard
+    },
+    { 
+      id: '6', 
+      title: 'Employees', 
+      icon: '📈',
+      route: NavigationRoutes.EmployeeSearch
     },
   ];
 
-  const handleNavigation = (route: keyof RootStackParamList) => {
+  const handleNavigation = (route: any) => {
     navigation.navigate(route as any);
     onClose();
   };

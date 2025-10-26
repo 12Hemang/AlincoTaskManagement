@@ -1,4 +1,5 @@
 import axios, { AxiosHeaders } from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const axiosInstance = axios.create({
   baseURL: 'https://stating-alnico.m.frappe.cloud/api',
@@ -56,6 +57,19 @@ axiosInstance.interceptors.request.use((config) => {
 
   return config;
 });
+
+
+axiosInstance.interceptors.request.use(
+  async config => {
+    const sid = await AsyncStorage.getItem('sid');
+    if (sid) {
+      // Frappe uses sid as a Cookie for authentication
+      config.headers.Cookie = `sid=${sid}`;
+    }
+    return config;
+  },
+  error => Promise.reject(error)
+);
 
 // Response interceptor
 axiosInstance.interceptors.response.use(

@@ -10,6 +10,7 @@ import TaskListScreen from '../../features/task/screens/TaskListScreen';
 import ProfileScreen from '../../features/auth/screens/ProfileScreen';
 import ProjectDetailScreen from '../../features/project/screens/ProjectDetailScreen';
 import ProjectInfoScreen from '../../features/project/screens/ProjectInfoScreen';
+import EmployeeSearch from '../../features/employee/components/EmployeeSearch.tsx';
 
 
 // export type RootStackParamList = {
@@ -24,7 +25,7 @@ import ProjectInfoScreen from '../../features/project/screens/ProjectInfoScreen'
 
 const Stack = createNativeStackNavigator();
 
-export default function AppNavigator() {
+export default function  AppNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName={NavigationRoutes.Login}  screenOptions={{
@@ -44,6 +45,8 @@ export default function AppNavigator() {
         <Stack.Screen name={NavigationRoutes.ProjectDetail} component={ProjectDetailScreen} />
         <Stack.Screen name={NavigationRoutes.ProjectInfoScreen} component={ProjectInfoScreen} />
 
+        <Stack.Screen name={NavigationRoutes.EmployeeSearch} component={EmployeeSearch} />
+
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -60,5 +63,7 @@ export enum NavigationRoutes{
   ProfileScreen = 'ProfileScreen',
   ProjectDetail = 'ProjectDetail',
   ProjectInfoScreen = 'ProjectInfoScreen',
-};
+
+  EmployeeSearch = "EmployeeSearch",
+}
 

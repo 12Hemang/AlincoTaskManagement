@@ -1,25 +1,42 @@
-import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
+// screens/TaskEdit.tsx
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
+  ActivityIndicator,
+  FlatList,
   KeyboardAvoidingView,
   Platform,
-  Alert,
-  ActivityIndicator
 } from 'react-native';
 import { useAppDispatch, useAppSelector } from '../../../app/hooks';
-import { createTask as createTaskAPI } from '../slice/taskSlice';
+import { updateTask, fetchTaskById } from '../slice/taskSlice';
+import {
+  fetchEmployees,
+  assignEmployeeToTask,
+  removeEmployeeFromTask,
+  addAssignedEmployee,
+  removeAssignedEmployee,
+  fetchAssignedEmployees,
+  fetchTaskToDos,
+  Employee,
+} from '../../employee/slice/employeeSlice';
+import { fetchProjects, Project } from '../../project/slice/projectSlice';
+import Dropdown from '../../../components/Dropdown';
 import BottomDragSheet from '../../../components/BottomDragSheet';
-import ProjectListScreen from '../../project/screens/ProjectListScreen';
+import EmployeeSearchScreen from '../../employee/components/EmployeeSearch';
 
-export default function TaskCreate({ navigation }: any) {
+export default function TaskEdit({ navigation, route }: any) {
+  const { taskId } = route.params || {};
   const dispatch = useAppDispatch();
-  const { loading: tasksLoading } = useAppSelector(state => state.task);
-  
+  const { selectedTask: task, loading: taskLoading } = useAppSelector(state => state.task);
+  const { assignedEmployees, todos } = useAppSelector(state => state.employee);
+  const { projects, loading: projectsLoading } = useAppSelector(state => state.project);
+
   const [form, setForm] = useState({
     subject: '',
     description: '',
@@ -27,41 +44,132 @@ export default function TaskCreate({ navigation }: any) {
     status: 'Open',
     priority: 'Medium',
   });
+  const [updating, setUpdating] = useState(false);
+  const [employeeModalVisible, setEmployeeModalVisible] = useState(false);
 
-  const [projectModalVisible, setProjectModalVisible] = useState(false);
-  const [creating, setCreating] = useState(false);
+  useEffect(() => {
+    if (taskId) {
+      dispatch(fetchTaskById(taskId));
+      dispatch(fetchAssignedEmployees(taskId));
+      dispatch(fetchTaskToDos(taskId));
+    }
+    dispatch(fetchProjects());
+  }, [dispatch, taskId]);
 
-  const createTask = async () => {
+  useEffect(() => {
+    if (task) {
+      setForm({
+        subject: task.subject || '',
+        description: task.description || '',
+        project: task.project || '',
+        status: task.status || 'Open',
+        priority: task.priority || 'Medium',
+      });
+    }
+  }, [task]);
+
+  // Prepare project options for dropdown
+  const projectOptions = [
+    { label: 'Select a project...', value: '' },
+    ...projects.map((project: Project) => ({
+      label: project.project_name,
+      value: project.name,
+    })),
+  ];
+
+  // Status options
+  const statusOptions = [
+    { label: 'Open', value: 'Open' },
+    { label: 'Working', value: 'Working' },
+    { label: 'Pending Review', value: 'Pending Review' },
+    { label: 'Overdue', value: 'Overdue' },
+    { label: 'Completed', value: 'Completed' },
+    { label: 'Cancelled', value: 'Cancelled' },
+  ];
+
+  // Priority options
+  const priorityOptions = [
+    { label: 'Low', value: 'Low' },
+    { label: 'Medium', value: 'Medium' },
+    { label: 'High', value: 'High' },
+    { label: 'Urgent', value: 'Urgent' },
+  ];
+
+  const updateTaskHandler = async () => {
     if (!form.subject.trim()) {
       Alert.alert('Validation Error', 'Please enter a subject for the task');
       return;
     }
 
-    setCreating(true);
+    setUpdating(true);
     try {
-      await dispatch(createTaskAPI(form)).unwrap();
-      Alert.alert('Success', 'Task created successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() }
+      const taskData = {
+        subject: form.subject.trim(),
+        description: form.description.trim(),
+        project: form.project || undefined,
+        status: form.status,
+        priority: form.priority,
+      };
+
+      await dispatch(updateTask({ id: taskId, task: taskData })).unwrap();
+
+      Alert.alert('Success', 'Task updated successfully!', [
+        { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (error: any) {
-      Alert.alert('Error', error?.message || 'Failed to create task. Please try again.');
+      Alert.alert('Error', error?.message || 'Failed to update task');
     } finally {
-      setCreating(false);
+      setUpdating(false);
     }
   };
 
-  const handleProjectSelect = (projectName: string) => {
-    console.log('Project selected in TaskCreate:', projectName);
-    setForm({ ...form, project: projectName });
-    setProjectModalVisible(false);
+  const handleEmployeeSelect = async (employee: Employee) => {
+    try {
+      await dispatch(
+        assignEmployeeToTask({
+          taskId: taskId,
+          employeeEmail: employee.value,
+          description: `Work on: ${form.subject}`,
+          priority: form.priority,
+        })
+      ).unwrap();
+
+      // Refresh assigned employees list
+      dispatch(fetchAssignedEmployees(taskId));
+      dispatch(fetchTaskToDos(taskId));
+      setEmployeeModalVisible(false);
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Failed to assign employee');
+    }
   };
 
-  const handleCloseProjectModal = () => {
-    setProjectModalVisible(false);
+  const handleRemoveEmployee = async (employee: Employee) => {
+    try {
+      await dispatch(
+        removeEmployeeFromTask({
+          taskId: taskId,
+          employeeEmail: employee.value,
+        })
+      ).unwrap();
+
+      // Refresh assigned employees list
+      dispatch(fetchAssignedEmployees(taskId));
+      dispatch(fetchTaskToDos(taskId));
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Failed to remove employee');
+    }
+  };
+
+  const handleCloseEmployeeSearch = () => {
+    setEmployeeModalVisible(false);
   };
 
   const handleBackPress = () => {
-    if (form.subject.trim() || form.description.trim() || form.project) {
+    if (form.subject !== task?.subject ||
+      form.description !== task?.description ||
+      form.project !== task?.project ||
+      form.status !== task?.status ||
+      form.priority !== task?.priority) {
       Alert.alert(
         'Discard Changes?',
         'You have unsaved changes. Are you sure you want to go back?',
@@ -75,29 +183,90 @@ export default function TaskCreate({ navigation }: any) {
     }
   };
 
+  const renderAssignedEmployee = ({ item }: { item: Employee }) => (
+    <View style={styles.assignedEmployeeItem}>
+      <View style={styles.employeeInfo}>
+        <Text style={styles.employeeName}>{item.description}</Text>
+        <Text style={styles.employeeEmail}>{item.value}</Text>
+      </View>
+      <TouchableOpacity
+        style={styles.removeEmployeeButton}
+        onPress={() => handleRemoveEmployee(item)}
+      >
+        <Text style={styles.removeEmployeeText}>✕</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderToDoItem = ({ item }: { item: any }) => (
+    <View style={styles.todoItem}>
+      <View style={styles.todoInfo}>
+        <Text style={styles.todoDescription}>{item.description}</Text>
+        <View style={styles.todoMeta}>
+          <Text style={[styles.todoStatus, getStatusStyle(item.status)]}>
+            {item.status}
+          </Text>
+          <Text style={[styles.todoPriority, getPriorityStyle(item.priority)]}>
+            {item.priority}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  const getStatusStyle = (status: string) => {
+    switch (status) {
+      case 'Open': return styles.statusOpen;
+      case 'Working': return styles.statusWorking;
+      case 'Pending Review': return styles.statusPending;
+      case 'Overdue': return styles.statusOverdue;
+      case 'Completed': return styles.statusCompleted;
+      case 'Cancelled': return styles.statusCancelled;
+      default: return styles.statusOpen;
+    }
+  };
+
+  const getPriorityStyle = (priority: string) => {
+    switch (priority) {
+      case 'Low': return styles.priorityLow;
+      case 'Medium': return styles.priorityMedium;
+      case 'High': return styles.priorityHigh;
+      case 'Urgent': return styles.priorityUrgent;
+      default: return styles.priorityMedium;
+    }
+  };
+
   const isFormValid = form.subject.trim().length > 0;
 
+  if (taskLoading && !task) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2196F3" />
+        <Text style={styles.loadingText}>Loading task...</Text>
+      </View>
+    );
+  }
+
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.backButton}
           onPress={handleBackPress}
         >
           <Text style={styles.backArrow}>‹</Text>
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Create New Task</Text>
-          <Text style={styles.headerSubtitle}>Fill in the task details</Text>
+          <Text style={styles.headerTitle}>Edit Task</Text>
+          <Text style={styles.headerSubtitle}>Update task details</Text>
         </View>
       </View>
 
-      {/* Form Content */}
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -145,33 +314,14 @@ export default function TaskCreate({ navigation }: any) {
           {/* Project Field */}
           <View style={styles.field}>
             <Text style={styles.label}>Project</Text>
-            <TouchableOpacity 
-              style={[
-                styles.projectSelector,
-                form.project && styles.projectSelectorSelected
-              ]}
-              onPress={() => setProjectModalVisible(true)}
-            >
-              <View style={styles.projectSelectorContent}>
-                <View style={styles.projectTextContainer}>
-                  <Text style={form.project ? styles.projectSelected : styles.projectPlaceholder}>
-                    {form.project || 'Select Project'}
-                  </Text>
-                  {form.project && (
-                    <Text style={styles.projectSelectedSubtext}>Selected</Text>
-                  )}
-                </View>
-                <Text style={styles.chevron}>›</Text>
-              </View>
-            </TouchableOpacity>
-            
-            {form.project && (
-              <TouchableOpacity 
-                style={styles.clearProjectButton}
-                onPress={() => setForm({ ...form, project: '' })}
-              >
-                <Text style={styles.clearProjectText}>Clear Selection</Text>
-              </TouchableOpacity>
+            <Dropdown
+              label=""
+              selectedValue={form.project}
+              onValueChange={(value) => setForm({ ...form, project: value })}
+              options={projectOptions}
+            />
+            {projectsLoading && (
+              <Text style={styles.loadingText}>Loading projects...</Text>
             )}
           </View>
 
@@ -179,62 +329,123 @@ export default function TaskCreate({ navigation }: any) {
           <View style={styles.row}>
             <View style={[styles.field, styles.halfField]}>
               <Text style={styles.label}>Status</Text>
-              <View style={[styles.input, styles.disabledInput]}>
-                <Text style={styles.disabledText}>{form.status}</Text>
-              </View>
+              <Dropdown
+                label=""
+                selectedValue={form.status}
+                onValueChange={(value) => setForm({ ...form, status: value })}
+                options={statusOptions}
+              />
             </View>
 
             <View style={[styles.field, styles.halfField]}>
               <Text style={styles.label}>Priority</Text>
-              <View style={[styles.input, styles.disabledInput]}>
-                <Text style={styles.disabledText}>{form.priority}</Text>
-              </View>
+              <Dropdown
+                label=""
+                selectedValue={form.priority}
+                onValueChange={(value) => setForm({ ...form, priority: value })}
+                options={priorityOptions}
+              />
             </View>
           </View>
 
-          {/* Create Button */}
-          <TouchableOpacity 
-            style={[
-              styles.createButton, 
-              (!isFormValid || creating) && styles.createButtonDisabled
-            ]}
-            onPress={createTask}
-            disabled={!isFormValid || creating}
-          >
-            {creating ? (
-              <View style={styles.buttonContent}>
-                <ActivityIndicator size="small" color="white" />
-                <Text style={styles.createButtonText}>Creating Task...</Text>
+          {/* Assigned Employees Section */}
+          <View style={styles.field}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.label}>Assigned Employees</Text>
+              <TouchableOpacity
+                style={styles.addEmployeeButton}
+                onPress={() => setEmployeeModalVisible(true)}
+              >
+                <Text style={styles.addEmployeeText}>+ Add Employee</Text>
+              </TouchableOpacity>
+            </View>
+
+            {assignedEmployees.length === 0 ? (
+              <View style={styles.noEmployees}>
+                <Text style={styles.noEmployeesText}>No employees assigned</Text>
+                <Text style={styles.noEmployeesSubtext}>
+                  Add employees who will work on this task
+                </Text>
               </View>
             ) : (
-              <Text style={styles.createButtonText}>Create Task</Text>
+              <View style={styles.assignedEmployeesList}>
+                <FlatList
+                  data={assignedEmployees}
+                  renderItem={renderAssignedEmployee}
+                  keyExtractor={(item) => item.value}
+                  scrollEnabled={false}
+                />
+                <Text style={styles.assignedCount}>
+                  {assignedEmployees.length} employee(s) assigned
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* ToDos Section */}
+          {todos.data && todos.data.length > 0 && (
+            <View style={styles.field}>
+              <Text style={styles.label}>Assignment Details</Text>
+              <View style={styles.todosList}>
+                <FlatList
+                  data={todos.data}
+                  renderItem={renderToDoItem}
+                  keyExtractor={(item) => item.name}
+                  scrollEnabled={false}
+                />
+              </View>
+            </View>
+          )}
+
+          {/* Update Button */}
+          <TouchableOpacity
+            style={[
+              styles.updateButton,
+              (!isFormValid || updating) && styles.updateButtonDisabled
+            ]}
+            onPress={updateTaskHandler}
+            disabled={!isFormValid || updating}
+          >
+            {updating ? (
+              <View style={styles.buttonContent}>
+                <ActivityIndicator size="small" color="white" />
+                <Text style={styles.updateButtonText}>Updating Task...</Text>
+              </View>
+            ) : (
+              <Text style={styles.updateButtonText}>Update Task</Text>
             )}
           </TouchableOpacity>
 
           {/* Form Tips */}
           <View style={styles.tipsContainer}>
             <Text style={styles.tipsTitle}>Tips:</Text>
-            <Text style={styles.tipsText}>• Provide a clear and concise subject</Text>
-            <Text style={styles.tipsText}>• Add detailed description for better context</Text>
-            <Text style={styles.tipsText}>• Assign to a project for better organization</Text>
+            <Text style={styles.tipsText}>• Keep the subject clear and concise</Text>
+            <Text style={styles.tipsText}>• Update description as task progresses</Text>
+            <Text style={styles.tipsText}>• Change status to reflect current progress</Text>
+            <Text style={styles.tipsText}>• Adjust priority based on urgency</Text>
+            <Text style={styles.tipsText}>• Assign relevant team members</Text>
           </View>
         </View>
       </ScrollView>
 
-      {/* Bottom Drag Sheet for Project Selection */}
+      {/* Employee Search Bottom Sheet */}
       <BottomDragSheet
-        visible={projectModalVisible}
-        onClose={handleCloseProjectModal}
-        title="Select Project"
-        subtitle="Choose a project for your task"
-        height={0.7}
+        visible={employeeModalVisible}
+        onClose={handleCloseEmployeeSearch}
+        title="Add Employee"
+        subtitle="Search and select employees to assign"
+        height={0.8}
         showDragHandle={true}
       >
-        <ProjectListScreen
-          onSelect={handleProjectSelect}
-          onClose={handleCloseProjectModal}
-          showHeader={false}
-          selectionMode={true}
+        <EmployeeSearchScreen
+          route={{
+            params: {
+              onEmployeeSelect: handleEmployeeSelect,
+              title: "Add Employee",
+              subtitle: "Search and select employees to assign",
+              currentSelection: null
+            }
+          }}
         />
       </BottomDragSheet>
     </KeyboardAvoidingView>
@@ -244,6 +455,12 @@ export default function TaskCreate({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f8f9fa',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#f8f9fa',
   },
   header: {
@@ -314,66 +531,146 @@ const styles = StyleSheet.create({
     minHeight: 120,
     textAlignVertical: 'top',
   },
-  disabledInput: {
-    backgroundColor: '#f5f5f5',
-    borderColor: '#E0E0E0',
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  disabledText: {
-    color: '#666',
-    fontSize: 16,
+  addEmployeeButton: {
+    backgroundColor: '#2196F3',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
   },
-  projectSelector: {
+  addEmployeeText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  noEmployees: {
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E0E0E0',
+    borderStyle: 'dashed',
+  },
+  noEmployeesText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  noEmployeesSubtext: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'center',
+  },
+  assignedEmployeesList: {
+    backgroundColor: '#f8f9fa',
     borderRadius: 8,
-    backgroundColor: 'white',
-    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    padding: 12,
   },
-  projectSelectorSelected: {
-    borderColor: '#2196F3',
-    backgroundColor: '#F3F9FF',
-  },
-  projectSelectorContent: {
+  assignedEmployeeItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'white',
+    borderRadius: 6,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
-  projectTextContainer: {
+  employeeInfo: {
     flex: 1,
   },
-  projectSelected: {
-    fontSize: 16,
-    color: '#2196F3',
+  employeeName: {
+    fontSize: 14,
     fontWeight: '600',
+    color: '#333',
+    marginBottom: 2,
   },
-  projectPlaceholder: {
+  employeeEmail: {
+    fontSize: 12,
+    color: '#666',
+  },
+  removeEmployeeButton: {
+    padding: 4,
+  },
+  removeEmployeeText: {
     fontSize: 16,
-    color: '#999',
-  },
-  projectSelectedSubtext: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
-  },
-  chevron: {
-    fontSize: 18,
-    color: '#666',
+    color: '#F44336',
     fontWeight: 'bold',
-    marginLeft: 8,
   },
-  clearProjectButton: {
-    alignSelf: 'flex-start',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  clearProjectText: {
+  assignedCount: {
     fontSize: 12,
-    color: '#2196F3',
-    fontWeight: '500',
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
-  createButton: {
-    backgroundColor: '#2196F3',
+  todosList: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    padding: 12,
+  },
+  todoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'white',
+    borderRadius: 6,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  todoInfo: {
+    flex: 1,
+  },
+  todoDescription: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 4,
+  },
+  todoMeta: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  todoStatus: {
+    fontSize: 12,
+    fontWeight: '500',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  todoPriority: {
+    fontSize: 12,
+    fontWeight: '500',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  statusOpen: { backgroundColor: '#E3F2FD', color: '#1976D2' },
+  statusWorking: { backgroundColor: '#FFF3E0', color: '#F57C00' },
+  statusPending: { backgroundColor: '#FFF8E1', color: '#FFA000' },
+  statusOverdue: { backgroundColor: '#FFEBEE', color: '#D32F2F' },
+  statusCompleted: { backgroundColor: '#E8F5E8', color: '#388E3C' },
+  statusCancelled: { backgroundColor: '#F5F5F5', color: '#757575' },
+  priorityLow: { backgroundColor: '#E8F5E8', color: '#388E3C' },
+  priorityMedium: { backgroundColor: '#FFF3E0', color: '#F57C00' },
+  priorityHigh: { backgroundColor: '#FFEBEE', color: '#D32F2F' },
+  priorityUrgent: { backgroundColor: '#FCE4EC', color: '#C2185B' },
+  updateButton: {
+    backgroundColor: '#4CAF50',
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
@@ -385,8 +682,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  createButtonDisabled: {
-    backgroundColor: '#BBDEFB',
+  updateButtonDisabled: {
+    backgroundColor: '#A5D6A7',
     shadowOpacity: 0,
     elevation: 0,
   },
@@ -395,7 +692,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  createButtonText: {
+  updateButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
@@ -429,5 +726,12 @@ const styles = StyleSheet.create({
     color: '#1976D2',
     marginBottom: 4,
     lineHeight: 16,
+  },
+  loadingText: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+    marginTop: 4,
+    marginLeft: 4,
   },
 });

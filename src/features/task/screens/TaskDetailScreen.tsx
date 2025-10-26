@@ -1,85 +1,71 @@
+// screens/TaskDetailScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  ScrollView, 
-  StyleSheet, 
+import {
+  View,
+  Text,
+  TextInput,
+  ScrollView,
+  StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
-  Alert
+  Alert,
 } from 'react-native';
 import { useAppDispatch, useAppSelector } from '../../../app/hooks';
 import { CommonStyles } from '../../../utils/commonStyles';
-import EmployeeSearch from '../../employee/components/EmployeeSearch';
-import { fetchEmployees, Employee } from '../../employee/slice/employeeSlice';
-import { fetchTaskById, assignEmployeeToTask, removeEmployeeFromTask } from '../slice/taskSlice';
+import { fetchTaskById } from '../slice/taskSlice';
+import {
+  assignEmployeeToTask,
+  removeEmployeeFromTask,
+  fetchAssignedEmployees,
+  Employee,
+} from '../../employee/slice/employeeSlice';
+import BottomDragSheet from '../../../components/BottomDragSheet';
+import EmployeeSearchScreen from '../../employee/components/EmployeeSearch.tsx';
 
-type Props = any;
+interface TaskDetailScreenProps {
+  route: any;
+  navigation: any;
+}
 
-// Safe helper function to handle assigned employees
-const getAssignedEmployees = (taskDetail: any): string[] => {
-  if (!taskDetail) return [];
-  
-  const assignedField = taskDetail.assigned;
-  console.log('Assigned field:', assignedField);
-  console.log('Type of assigned field:', typeof assignedField);
-  
-  // Handle all possible cases
-  if (!assignedField) {
-    return [];
-  }
-  
-  if (Array.isArray(assignedField)) {
-    return assignedField;
-  }
-  
-  if (typeof assignedField === 'string') {
-    return assignedField.split(',').map(emp => emp.trim()).filter(emp => emp);
-  }
-  
-  // Fallback for any other type
-  return [];
-};
-
-const TaskDetailScreen: React.FC<Props> = ({ route, navigation }) => {
+const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({ route, navigation }) => {
   const { taskName } = route.params;
   const dispatch = useAppDispatch();
-  const { selectedTask: taskDetail, loading } = useAppSelector(state => state.task);
-  const { employees } = useAppSelector(state => state.employee);
-  
+  const { selectedTask: taskDetail, loading } = useAppSelector((state) => state.task);
+  const { assignedEmployees, todos } = useAppSelector((state) => state.employee);
+
   const [showEmployeeSearch, setShowEmployeeSearch] = useState(false);
   const [assignmentLoading, setAssignmentLoading] = useState<string | null>(null);
 
+  // Fetch task detail and assigned employees
   useEffect(() => {
-    console.log('Fetching task detail for:', taskName);
-    dispatch(fetchTaskById(taskName));
-    dispatch(fetchEmployees());
-  }, [taskName]);
+    if (taskName) {
+      dispatch(fetchTaskById(taskName));
+      dispatch(fetchAssignedEmployees(taskName));
+    }
+  }, [taskName, dispatch]);
 
-  const assignedEmployeesList = () => {
-    if (!taskDetail) return [];
-    
-    // Get assigned employee names as array using the safe helper
-    const assignedEmployeeNames = getAssignedEmployees(taskDetail);
-    
-    console.log('Assigned employee names:', assignedEmployeeNames);
-    console.log('Available employees:', employees);
-    
-    return employees.filter(emp => assignedEmployeeNames.includes(emp.name));
-  };
-
+  // -------------------------
+  // Assign Employee Handler
+  // -------------------------
   const handleAssignEmployee = async (employee: Employee) => {
     if (!taskDetail) return;
-    
-    setAssignmentLoading(employee.name);
+
+    setAssignmentLoading(employee.value);
     try {
-      await dispatch(assignEmployeeToTask({
-        taskId: taskDetail.name,
-        employeeName: employee.name
-      })).unwrap();
-      
-      Alert.alert('Success', `${employee.employee_name} assigned to task successfully!`);
+      await dispatch(
+        assignEmployeeToTask({
+          taskId: taskDetail.name,
+          employeeEmail: employee.value,
+          description: `Work on: ${taskDetail.subject}`,
+          priority: taskDetail.priority || 'Medium',
+        })
+      ).unwrap();
+
+      // Refresh assigned employees list
+      await dispatch(fetchAssignedEmployees(taskDetail.name));
+
+      setShowEmployeeSearch(false);
+      Alert.alert('Success', `${employee.description} assigned to task successfully!`);
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Failed to assign employee');
     } finally {
@@ -87,26 +73,34 @@ const TaskDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
+  // -------------------------
+  // Remove Employee Handler
+  // -------------------------
   const handleRemoveEmployee = async (employee: Employee) => {
     if (!taskDetail) return;
-    
+
     Alert.alert(
-      'Remove Employee',
-      `Are you sure you want to remove ${employee.employee_name} from this task?`,
+      'Remove Assignment',
+      `Are you sure you want to remove ${employee.description} from this task?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            setAssignmentLoading(employee.name);
+            setAssignmentLoading(employee.value);
             try {
-              await dispatch(removeEmployeeFromTask({
-                taskId: taskDetail.name,
-                employeeName: employee.name
-              })).unwrap();
-              
-              Alert.alert('Success', `${employee.employee_name} removed from task successfully!`);
+              await dispatch(
+                removeEmployeeFromTask({
+                  taskId: taskDetail.name,
+                  employeeEmail: employee.value,
+                })
+              ).unwrap();
+
+              // Refresh assigned employees list
+              await dispatch(fetchAssignedEmployees(taskDetail.name));
+
+              Alert.alert('Success', `${employee.description} removed from task successfully!`);
             } catch (error: any) {
               Alert.alert('Error', error?.message || 'Failed to remove employee');
             } finally {
@@ -118,6 +112,16 @@ const TaskDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   };
 
+  // -------------------------
+  // Close Employee Search
+  // -------------------------
+  const handleCloseEmployeeSearch = () => {
+    setShowEmployeeSearch(false);
+  };
+
+  // -------------------------
+  // Render Field Helper
+  // -------------------------
   const renderField = (label: string, value?: string | number) => (
     <View style={styles.fieldContainer} key={label}>
       <Text style={styles.label}>{label}</Text>
@@ -131,7 +135,28 @@ const TaskDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     </View>
   );
 
-  const assignedEmployees = assignedEmployeesList();
+  // -------------------------
+  // Render Assigned Employee Item
+  // -------------------------
+  const renderAssignedEmployee = (employee: Employee) => (
+    <View key={employee.value} style={styles.employeeCard}>
+      <View style={styles.employeeInfo}>
+        <Text style={styles.employeeName}>{employee.description}</Text>
+        <Text style={styles.employeeEmail}>{employee.value}</Text>
+      </View>
+      <TouchableOpacity
+        style={styles.removeButton}
+        onPress={() => handleRemoveEmployee(employee)}
+        disabled={assignmentLoading === employee.value}
+      >
+        {assignmentLoading === employee.value ? (
+          <ActivityIndicator size="small" color="#F44336" />
+        ) : (
+          <Text style={styles.removeButtonText}>Remove</Text>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
 
   if (loading || !taskDetail) {
     return (
@@ -144,35 +169,33 @@ const TaskDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Task Details</Text>
         <Text style={styles.headerSubtitle}>{taskDetail.name}</Text>
       </View>
-      
-      <ScrollView 
+
+      <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Basic Task Information */}
+        {/* Task Information */}
         <View style={CommonStyles.card}>
-          <Text style={styles.sectionTitle}>Basic Information</Text>
-          {renderField('Task ID', taskDetail.name)}
+          <Text style={styles.sectionTitle}>Task Information</Text>
           {renderField('Subject', taskDetail.subject)}
           {renderField('Status', taskDetail.status)}
           {renderField('Priority', taskDetail.priority)}
-          {renderField('Company', taskDetail.company)}
+          {renderField('Project', taskDetail.project)}
           {renderField('Owner', taskDetail.owner)}
-          {renderField('Modified By', taskDetail.modified_by)}
-          {renderField('Created On', taskDetail.creation)}
-          {renderField('Modified On', taskDetail.modified)}
-          {renderField('Progress', `${taskDetail.progress}%`)}
+          {renderField('Progress', taskDetail.progress ? `${taskDetail.progress}%` : '0%')}
+          {taskDetail.description && renderField('Description', taskDetail.description)}
         </View>
 
         {/* Assigned Employees Section */}
         <View style={CommonStyles.card}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Assigned Employees</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.assignButton}
               onPress={() => setShowEmployeeSearch(true)}
             >
@@ -184,45 +207,49 @@ const TaskDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             <View style={styles.noEmployees}>
               <Text style={styles.noEmployeesText}>No employees assigned</Text>
               <Text style={styles.noEmployeesSubtext}>
-                Assign employees to this task for better tracking
+                Assign employees to track their work on this task
               </Text>
             </View>
           ) : (
             <View style={styles.employeesList}>
-              {assignedEmployees.map(employee => (
-                <View key={employee.name} style={styles.employeeCard}>
-                  <View style={styles.employeeInfo}>
-                    <Text style={styles.employeeName}>{employee.employee_name}</Text>
-                    <Text style={styles.employeeDetails}>
-                      {employee.designation} • {employee.department}
-                    </Text>
-                    <Text style={styles.employeeCompany}>{employee.company}</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.removeButton}
-                    onPress={() => handleRemoveEmployee(employee)}
-                    disabled={assignmentLoading === employee.name}
-                  >
-                    {assignmentLoading === employee.name ? (
-                      <ActivityIndicator size="small" color="#F44336" />
-                    ) : (
-                      <Text style={styles.removeButtonText}>Remove</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              ))}
+              {assignedEmployees.map(renderAssignedEmployee)}
+              <Text style={styles.assignmentCount}>
+                {assignedEmployees.length} employee(s) assigned
+              </Text>
             </View>
           )}
         </View>
+
+        {/* ToDo Information */}
+        {todos.data && todos.data.length > 0 && (
+          <View style={CommonStyles.card}>
+            <Text style={styles.sectionTitle}>Assignment Details</Text>
+            <Text style={styles.todoInfo}>
+              {todos.data.length} active assignment(s) via ToDo
+            </Text>
+          </View>
+        )}
       </ScrollView>
 
-      {/* Employee Search Modal */}
-      <EmployeeSearch
+      {/* Employee Search Bottom Drag Sheet */}
+      <BottomDragSheet
         visible={showEmployeeSearch}
-        onClose={() => setShowEmployeeSearch(false)}
-        onEmployeeSelect={handleAssignEmployee}
-        assignedEmployees={assignedEmployees.map(emp => emp.name)}
-      />
+        onClose={handleCloseEmployeeSearch}
+        title="Assign Employee"
+        subtitle="Search and select an employee to assign to this task"
+        height={0.8}
+        showDragHandle={true}
+      >
+        <EmployeeSearchScreen
+          route={{
+            params: {
+              onEmployeeSelect: handleAssignEmployee,
+              //title: "Assign Employee",
+              //subtitle: "Search and select an employee to assign to this task"
+            }
+          }}
+        />
+      </BottomDragSheet>
     </View>
   );
 };
@@ -264,7 +291,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   fieldContainer: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   label: {
     fontSize: 14,
@@ -313,14 +340,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   employeeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#f8f9fa',
     padding: 16,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
   employeeInfo: {
     flex: 1,
@@ -331,25 +358,34 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 4,
   },
-  employeeDetails: {
-    fontSize: 12,
+  employeeEmail: {
+    fontSize: 14,
     color: '#666',
-    marginBottom: 2,
-  },
-  employeeCompany: {
-    fontSize: 11,
-    color: '#999',
   },
   removeButton: {
     backgroundColor: '#ffebee',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 4,
+    minWidth: 70,
+    alignItems: 'center',
   },
   removeButtonText: {
     color: '#F44336',
     fontSize: 12,
     fontWeight: '600',
+  },
+  assignmentCount: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  todoInfo: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
   },
   center: {
     flex: 1,

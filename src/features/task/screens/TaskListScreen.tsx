@@ -105,7 +105,9 @@ export default function TaskListScreen({ navigation }: Props) {
   const renderTaskItem = ({ item }: { item: any }) => (
     <TouchableOpacity
       style={CommonStyles.card}
-      onPress={() => navigation.navigate('TaskDetail', { taskName: item.name })}
+      onPress={() =>
+        navigation.navigate('TaskCreate', { taskId: item.name }) // pass taskId to edit
+      }
     >
       {/* Task Header */}
       <View style={styles.taskHeader}>
@@ -133,7 +135,7 @@ export default function TaskListScreen({ navigation }: Props) {
           <Text style={styles.detailLabel}>ID:</Text>
           <Text style={styles.detailValue}>{item.name}</Text>
         </View>
-        
+
         {item.project && (
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Project:</Text>
@@ -142,7 +144,7 @@ export default function TaskListScreen({ navigation }: Props) {
             </Text>
           </View>
         )}
-        
+
         <View style={styles.detailRow}>
           <Text style={styles.detailLabel}>Created:</Text>
           <Text style={styles.detailValue}>{formatDate(item.creation)}</Text>
@@ -154,15 +156,14 @@ export default function TaskListScreen({ navigation }: Props) {
           </Text>
         )}
 
-        {/* Progress if available */}
         {item.progress !== undefined && item.progress > 0 && (
           <View style={styles.progressContainer}>
             <View style={styles.progressBar}>
-              <View 
+              <View
                 style={[
-                  styles.progressFill, 
+                  styles.progressFill,
                   { width: `${Math.min(item.progress, 100)}%` }
-                ]} 
+                ]}
               />
             </View>
             <Text style={styles.progressText}>{item.progress}%</Text>

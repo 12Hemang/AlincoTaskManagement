@@ -14,14 +14,26 @@ import { loginUser } from '../slice/authSlice';
 import { NavigationRoutes } from '../../../app/navigation/AppNavigator';
 
 export default function LoginScreen({ navigation }: any) {
-  const [usr, setUsr] = useState('hemang.api@alnicoelectric.com');
-  const [pwd, setPwd] = useState('Hemang@2871#');
+  const [usr, setUsr] = useState(__DEV__?'hemang.api@alnicoelectric.com':'');
+  const [pwd, setPwd] = useState(__DEV__?'Hemang@2871#':'');
+  const [showPassword, setShowPassword] = useState(false);
   const dispatch = useAppDispatch();
   const { loading, error, sid } = useAppSelector(state => state.auth);
 
   useEffect(() => {
     if (sid) navigation.replace(NavigationRoutes.Dashboard);
   }, [sid]);
+
+  const toggleShowPassword = () => {
+    setShowPassword(!showPassword);
+  };
+
+  // Lock and unlock unicode icons
+  const LockIcon = () => (
+    <Text style={styles.lockIcon}>
+      {showPassword ? '🔓' : '🔒'}
+    </Text>
+  );
 
   return (
     <KeyboardAvoidingView 
@@ -43,14 +55,22 @@ export default function LoginScreen({ navigation }: any) {
             keyboardType="email-address"
           />
           
-          <TextInput 
-            placeholder="Password" 
-            placeholderTextColor="#999"
-            value={pwd} 
-            onChangeText={setPwd} 
-            secureTextEntry 
-            style={styles.input} 
-          />
+          <View style={styles.passwordContainer}>
+            <TextInput 
+              placeholder="Password" 
+              placeholderTextColor="#999"
+              value={pwd} 
+              onChangeText={setPwd} 
+              secureTextEntry={!showPassword}
+              style={styles.passwordInput} 
+            />
+            <TouchableOpacity 
+              style={styles.lockButton}
+              onPress={toggleShowPassword}
+            >
+              <LockIcon />
+            </TouchableOpacity>
+          </View>
           
           {error && <Text style={styles.errorText}>{error}</Text>}
           
@@ -112,6 +132,29 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     fontSize: 16,
     backgroundColor: '#FAFAFA',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    marginBottom: 16,
+    backgroundColor: '#FAFAFA',
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 16,
+    fontSize: 16,
+    color: '#000',
+  },
+  lockButton: {
+    padding: 16,
+  },
+  lockIcon: {
+    fontSize: 18,
+    color: '#999', // Same grey as placeholder text
+    opacity: 0.8, // Slightly saturated
   },
   loginButton: {
     backgroundColor: '#2196F3',
